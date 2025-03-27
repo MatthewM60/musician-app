@@ -1,0 +1,16 @@
+-- Create the table
+CREATE TABLE musicians (
+  id VARCHAR(50) PRIMARY KEY,
+  first_name VARCHAR(50) NOT NULL,
+  last_name VARCHAR(50) NOT NULL,
+  genre VARCHAR(50) NOT NULL
+);
+
+-- Insert initial data
+INSERT INTO musicians (id, first_name, last_name, genre) VALUES
+('coltrane', 'John', 'Coltrane', 'JAZZ'),
+('davis', 'Gustav', 'Ejstes', 'ROCK'),
+('mccartney', 'Paul', 'McCartney', 'ROCK'),
+('hendrix', 'Jimi', 'Hendrix', 'ROCK'),
+('cobain', 'Kurt', 'Cobain', 'ROCK'),
+('king', 'Bo', 'Hansson', 'ROCK');
