@@ -1,0 +1,79 @@
+const mysql = require('mysql2/promise');
+const AWS = require('aws-sdk');
+
+exports.handler = async (event) => {
+    let connection;
+    let secretsManager = new AWS.SecretsManager();
+    
+    try {
+        // Retrieve credentials from Secrets Manager
+        const secretData = await secretsManager.getSecretValue({
+            SecretId: process.env.SECRET_ID // Environment variable for Secret ID
+        }).promise();
+
+        // Parse the secret string
+        const credentials = JSON.parse(secretData.SecretString);
+
+        // RDS connection configuration
+        const connectionConfig = {
+            host: credentials.host,
+            user: credentials.username,
+            password: credentials.password,
+            database: credentials.dbname
+        };
+
+        // Create database connection
+        connection = await mysql.createConnection(connectionConfig);
+
+        // Create musicians table
+        await connection.execute(`
+            CREATE TABLE IF NOT EXISTS musicians (
+                id VARCHAR(50) PRIMARY KEY,
+                first_name VARCHAR(50) NOT NULL,
+                last_name VARCHAR(50) NOT NULL,
+                genre VARCHAR(50) NOT NULL
+            )
+        `);
+
+        // Initial data
+        const musicians = [
+            ['coltrane', 'John', 'Coltrane', 'JAZZ'],
+            ['davis', 'Gustav', 'Ejstes', 'ROCK'],
+            ['mccartney', 'Paul', 'McCartney', 'ROCK'],
+            ['hendrix', 'Jimi', 'Hendrix', 'ROCK'],
+            ['cobain', 'Kurt', 'Cobain', 'ROCK'],
+            ['king', 'Bo', 'Hansson', 'ROCK']
+        ];
+
+        // Insert data
+        const insertQuery = `
+            INSERT INTO musicians (id, first_name, last_name, genre) 
+            VALUES (?, ?, ?, ?)
+        `;
+
+        for (const musician of musicians) {
+            await connection.execute(insertQuery, musician);
+        }
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: 'Musicians table initialized successfully'
+            })
+        };
+
+    } catch (error) {
+        console.error('Error:', error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                message: 'Error initializing musicians table',
+                error: error.message
+            })
+        };
+    } finally {
+        if (connection) {
+            await connection.end();
+        }
+    }
+};

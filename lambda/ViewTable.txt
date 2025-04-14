@@ -1,0 +1,59 @@
+const mysql = require('mysql2/promise');
+const AWS = require('aws-sdk');
+
+exports.handler = async (event) => {
+    let connection;
+    let secretsManager = new AWS.SecretsManager();
+
+    try {
+        // Retrieve credentials from Secrets Manager
+        const secretData = await secretsManager.getSecretValue({
+            SecretId: process.env.SECRET_ID // Environment variable for Secret ID
+        }).promise();
+
+        // Parse the secret string
+        const credentials = JSON.parse(secretData.SecretString);
+
+        // RDS connection configuration
+        const connectionConfig = {
+            host: credentials.host,
+            user: credentials.username,
+            password: credentials.password,
+            database: credentials.dbname
+        };
+
+        // Create database connection
+        connection = await mysql.createConnection(connectionConfig);
+
+        // Query to get all musicians
+        const [rows] = await connection.execute('SELECT * FROM musicians');
+
+        // Log the results
+        console.log('Musicians data:');
+        rows.forEach(row => {
+            console.log(`ID: ${row.id}, Name: ${row.first_name} ${row.last_name}, Genre: ${row.genre}`);
+        });
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: 'Musicians data retrieved successfully',
+                data: rows
+            })
+        };
+
+    } catch (error) {
+        console.error('Error:', error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                message: 'Error retrieving musicians data',
+                error: error.message
+            })
+        };
+    } finally {
+        if (connection) {
+            await connection.end();
+        }
+    }
+};
