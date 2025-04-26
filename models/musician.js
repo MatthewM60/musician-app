@@ -1,54 +1,66 @@
+// model object with methods for store CRUD operations
 class Musician {
-  constructor(dbConnection) {
-    this.db = dbConnection;
+
+  constructor(store) {
+    this.store = store;
+  }
+  
+  // hydrate store with initial data
+  initStore(data) {
+    const newStore = Object.assign(this.store, data);
+    this.store = newStore;
+  };
+
+  // utility functions
+  getStore() {
+    return this.store;
+  }
+  
+  printStore() {
+    console.log(this.store);
+  };
+
+  isMusicianInStore(id) {
+    const keys = Object.keys(this.store);
+    return keys.includes(id);
   }
 
-  async getMusicians(callback) {
-    try {
-      const [rows] = await this.db.execute('SELECT * FROM musicians');
-      callback(null, rows);
-    } catch (err) {
-      callback(err, null);
-    }
+  // get list of musicians from storage
+  getMusicians(id, callback) {
+    return callback(null, this.store);
   }
 
-  async getMusician(id, callback) {
-    try {
-      const [rows] = await this.db.execute(
-        'SELECT * FROM musicians WHERE id = ?',
-        [id]
-      );
-      callback(null, rows[0] || null);
-    } catch (err) {
-      callback(err, null);
+  // get musician from storage
+  getMusician(id, callback) {
+    if(this.isMusicianInStore(id)) {
+      return callback(null, this.store[id]);
     }
+    return callback('Musician does not exist');
   }
 
-  async putMusician(id, data, callback) {
-    try {
-      const [result] = await this.db.execute(
-        'INSERT INTO musicians (id, first_name, last_name, genre) VALUES (?, ?, ?, ?) ' +
-        'ON DUPLICATE KEY UPDATE first_name = ?, last_name = ?, genre = ?',
-        [id, data.firstName, data.lastName, data.genre, 
-         data.firstName, data.lastName, data.genre]
-      );
-      callback(null, id);
-    } catch (err) {
-      callback(err, null);
+  // modify existing musician or add a new one to storage
+  putMusician(id, musician, callback) {
+    if (id !== musician.firstName.toLowerCase()) {
+      return callback("Musician id in request path and body do not match.");
     }
+    const newStore = Object.assign({}, this.store);
+    if(this.isMusicianInStore(id)) {
+      const newMusician = Object.assign(this.store[id], musician);
+      newStore[id] = newMusician;
+    }else {
+      newStore[id] = musician;
+    }
+    this.store = newStore;
+    return callback(null, id);
   }
 
-  async deleteMusician(id, callback) {
-    try {
-      const [result] = await this.db.execute(
-        'DELETE FROM musicians WHERE id = ?',
-        [id]
-      );
-      callback(null, id);
-    } catch (err) {
-      callback(err, null);
-    }
+  deleteMusician(id, callback) {
+    const newStore = Object.assign({}, this.store);
+    delete newStore[id];
+    this.store = newStore;
+    return callback(null, id);
   }
+  
 }
 
 module.exports = Musician;
