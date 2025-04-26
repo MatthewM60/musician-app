@@ -1,0 +1,60 @@
+import json
+import boto3
+import pymysql
+
+# Retrieve credentials from AWS Secrets Manager
+secrets_manager = boto3.client('secretsmanager')
+response = secrets_manager.get_secret_value(SecretId='musicianapp-rds-credentials')
+secret_string = response['SecretString']
+credentials = json.loads(secret_string)
+
+# Extract database connection details
+host = credentials['host']
+port = int(credentials['port'])
+username = credentials['username']
+password = credentials['password']
+database_name = credentials['dbname']
+
+# Establish database connection (reused across invocations)
+connection = pymysql.connect(
+    host=host,
+    port=port,
+    user=username,
+    password=password,
+    db=database_name,
+    cursorclass=pymysql.cursors.DictCursor
+)
+
+def lambda_handler(event, context):
+    # Get the request body from the event
+    body = event.get('body')
+    if body is None:
+        return {'statusCode': 400, 'body': 'Missing request body'}
+
+    # Parse the JSON body
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return {'statusCode': 400, 'body': 'Invalid JSON'}
+
+    # Check for 'id' in the data
+    if 'id' not in data:
+        return {'statusCode': 400, 'body': 'Missing id'}
+
+    id_value = data['id']
+    if not id_value.strip():
+        return {'statusCode': 400, 'body': 'Id cannot be empty'}
+
+    try:
+        with connection.cursor() as cursor:
+            # Execute the DELETE statement
+            cursor.execute("DELETE FROM musicians WHERE id = %s", (id_value,))
+            affected_rows = cursor.rowcount
+        connection.commit()
+
+        if affected_rows > 0:
+            return {'statusCode': 200, 'body': 'Musician removed successfully'}
+        else:
+            return {'statusCode': 404, 'body': 'Musician not found'}
+    except Exception as e:
+        return {'statusCode': 500, 'body': str(e)}

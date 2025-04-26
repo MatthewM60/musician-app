@@ -1,0 +1,67 @@
+import json
+import boto3
+import pymysql
+from pymysql import err
+
+# Retrieve credentials from AWS Secrets Manager
+secrets_manager = boto3.client('secretsmanager')
+response = secrets_manager.get_secret_value(SecretId='musicianapp-rds-credentials')
+secret_string = response['SecretString']
+credentials = json.loads(secret_string)
+
+# Extract database connection details
+host = credentials['host']
+port = int(credentials['port'])
+username = credentials['username']
+password = credentials['password']
+database_name = credentials['dbname']
+
+# Establish database connection (reused across invocations)
+connection = pymysql.connect(
+    host=host,
+    port=port,
+    user=username,
+    password=password,
+    db=database_name,
+    cursorclass=pymysql.cursors.DictCursor
+)
+
+def lambda_handler(event, context):
+    # Get the request body from the event
+    body = event.get('body')
+    if body is None:
+        return {'statusCode': 400, 'body': 'Missing request body'}
+
+    # Parse the JSON body
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return {'statusCode': 400, 'body': 'Invalid JSON'}
+
+    # Define required fields based on the musicians table schema
+    required_fields = ['id', 'first_name', 'last_name', 'genre']
+    for field in required_fields:
+        if field not in data:
+            return {'statusCode': 400, 'body': f'Missing field: {field}'}
+
+    # Extract musician data
+    musician_id = data['id']
+    first_name = data['first_name']
+    last_name = data['last_name']
+    genre = data['genre']
+
+    try:
+        with connection.cursor() as cursor:
+            # Insert the new musician using a parameterized query to prevent SQL injection
+            cursor.execute(
+                "INSERT INTO musicians (id, first_name, last_name, genre) VALUES (%s, %s, %s, %s)",
+                (musician_id, first_name, last_name, genre)
+            )
+        connection.commit()
+        return {'statusCode': 200, 'body': 'Musician inserted successfully'}
+    except err.IntegrityError as e:
+        # Handle duplicate ID error
+        return {'statusCode': 400, 'body': 'Duplicate id'}
+    except Exception as e:
+        # Handle other unexpected errors
+        return {'statusCode': 500, 'body': str(e)}

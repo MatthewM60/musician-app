@@ -1,79 +1,51 @@
-const mysql = require('mysql2/promise');
-const AWS = require('aws-sdk');
+import mysql from 'mysql2/promise';
 
-exports.handler = async (event) => {
-    let connection;
-    let secretsManager = new AWS.SecretsManager();
-    
-    try {
-        // Retrieve credentials from Secrets Manager
-        const secretData = await secretsManager.getSecretValue({
-            SecretId: process.env.SECRET_ID // Environment variable for Secret ID
-        }).promise();
+export const handler = async (event, context) => {
+  try {
+    // Connect to the RDS database using environment variables
+    const connection = await mysql.createConnection({
+      host: process.env.RDS_HOSTNAME,
+      port: process.env.RDS_PORT,
+      user: process.env.RDS_USERNAME,
+      password: process.env.RDS_PASSWORD,
+      database: process.env.RDS_DB_NAME,
+    });
 
-        // Parse the secret string
-        const credentials = JSON.parse(secretData.SecretString);
+    // SQL query to create the table (with IF NOT EXISTS for robustness)
+    const sql1 = `CREATE TABLE IF NOT EXISTS musicians (
+      id VARCHAR(50) PRIMARY KEY,
+      first_name VARCHAR(50) NOT NULL,
+      last_name VARCHAR(50) NOT NULL,
+      genre VARCHAR(50) NOT NULL
+    );`;
 
-        // RDS connection configuration
-        const connectionConfig = {
-            host: credentials.host,
-            user: credentials.username,
-            password: credentials.password,
-            database: credentials.dbname
-        };
+    // SQL query to insert initial data
+    const sql2 = `INSERT INTO musicians (id, first_name, last_name, genre) VALUES
+    ('coltrane', 'John', 'Coltrane', 'JAZZ'),
+    ('davis', 'Gustav', 'Ejstes', 'ROCK'),
+    ('mccartney', 'Paul', 'McCartney', 'ROCK'),
+    ('hendrix', 'Jimi', 'Hendrix', 'ROCK'),
+    ('cobain', 'Kurt', 'Cobain', 'ROCK'),
+    ('king', 'Bo', 'Hansson', 'ROCK');`;
 
-        // Create database connection
-        connection = await mysql.createConnection(connectionConfig);
+    // Execute the SQL queries
+    await connection.query(sql1);
+    await connection.query(sql2);
 
-        // Create musicians table
-        await connection.execute(`
-            CREATE TABLE IF NOT EXISTS musicians (
-                id VARCHAR(50) PRIMARY KEY,
-                first_name VARCHAR(50) NOT NULL,
-                last_name VARCHAR(50) NOT NULL,
-                genre VARCHAR(50) NOT NULL
-            )
-        `);
+    // Close the database connection
+    await connection.end();
 
-        // Initial data
-        const musicians = [
-            ['coltrane', 'John', 'Coltrane', 'JAZZ'],
-            ['davis', 'Gustav', 'Ejstes', 'ROCK'],
-            ['mccartney', 'Paul', 'McCartney', 'ROCK'],
-            ['hendrix', 'Jimi', 'Hendrix', 'ROCK'],
-            ['cobain', 'Kurt', 'Cobain', 'ROCK'],
-            ['king', 'Bo', 'Hansson', 'ROCK']
-        ];
-
-        // Insert data
-        const insertQuery = `
-            INSERT INTO musicians (id, first_name, last_name, genre) 
-            VALUES (?, ?, ?, ?)
-        `;
-
-        for (const musician of musicians) {
-            await connection.execute(insertQuery, musician);
-        }
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: 'Musicians table initialized successfully'
-            })
-        };
-
-    } catch (error) {
-        console.error('Error:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                message: 'Error initializing musicians table',
-                error: error.message
-            })
-        };
-    } finally {
-        if (connection) {
-            await connection.end();
-        }
-    }
+    // Return a success response
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Table created and data inserted successfully' }),
+    };
+  } catch (error) {
+    // Log the error and return a failure response
+    console.error(error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ message: 'Error executing query', error: error.message }),
+    };
+  }
 };
